@@ -153,7 +153,8 @@ roadget from body = do
   if ((length cities) == 2) then do
     gr <- path (head (map getnames cities)) (head (tail(map getnames cities)))
     return ("Hello,"++from++". Here's your request: "++gr++".") else return ("Wrong Input."++ from++", correct it, please, and try again.")
-
+--Тестовый запуск программы, который считывает с ввода данные, которые должны были приходить в функцию разбора 
+--сообщений, а именно Имя пользователя и строку-сообщение для разбора.
 run :: IO ()
 run = do
   print "Enter your name:"
