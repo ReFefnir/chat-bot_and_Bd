@@ -37,7 +37,7 @@ sqlCmd_ q conn = execute_ conn q
   q2 conn
 --Сами функции, посылающие sql запросы. 
 selecttwocities :: String -> SqlQuery [Citynames]
-selecttwocities spstring = sqlQuery "Select s.name from (Select instr ((?),t.name) as pos, t.name from cities t) s where s.pos>0 order by s.pos;" [spstring]
+selecttwocities spstring = sqlQuery "Select s.name from (Select instr (BINARY (?),t.name) as pos, t.name from cities t) s where s.pos>0 order by s.pos;" [spstring]
 
 selectcityname :: String -> SqlQuery [Cities]
 selectcityname name = sqlQuery "SELECT id, Name, Continent, Country, Latitude, Longitude FROM cities WHERE Name = (?) ;" [name]
