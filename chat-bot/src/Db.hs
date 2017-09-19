@@ -152,7 +152,7 @@ roadget from body = do
   cities <- res body conn
   if ((length cities) == 2) then do
     gr <- path (head (map getnames cities)) (head (tail(map getnames cities)))
-    return ("Hello,"++from++". Here's your request:"++gr++".") else return ("Wrong Input."++ from++", correct it, please, and try again.")
+    return ("Hello,"++from++". Here's your request: "++gr++".") else return ("Wrong Input."++ from++", correct it, please, and try again.")
 
 run :: IO ()
 run = do
