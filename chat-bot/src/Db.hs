@@ -14,16 +14,17 @@ import System.IO
 import Control.Applicative
 
 import Prelude
- 
+
 type SqlQuery a = Connection -> IO a
 type SqlCommand = Connection -> IO Int64
- 
+ --Обобщенное описание функция для отправки sql-запрсоов с параметрами и без. На них строятся все функции
+--запрсоов.
 sqlQuery :: (QueryParams q, QueryResults r) => Query -> q -> Connection -> IO [r]
 sqlQuery q vs conn = query conn q vs
 
 sqlQuery_ :: QueryResults r => Query -> Connection -> IO [r]
 sqlQuery_ q conn = query_ conn q
-
+--Последние две в итоге не были использованы, они нужны для модификации БД, но данный функционал так и не был --задействован в модуле Graph, занимающимся этим
 sqlCmd :: QueryParams q => Query -> q -> Connection -> IO Int64
 sqlCmd q vs conn = execute conn q vs
 
@@ -34,7 +35,7 @@ sqlCmd_ q conn = execute_ conn q
 (>>>) q1 q2 conn = do
   q1 conn
   q2 conn
-
+--Сами функции, посылающие sql запросы. 
 selecttwocities :: String -> SqlQuery [Citynames]
 selecttwocities spstring = sqlQuery "Select Name from cities where instr ((?),Name) >0 order by instr ((?),Name);" [spstring, spstring]
 
@@ -54,10 +55,7 @@ selectflight toid fromid = sqlQuery " SELECT id, Flight, `From`, `To` FROM fligh
 selectcollfl :: Int -> SqlQuery [Collfl]
 selectcollfl  collid = sqlQuery " SELECT Collection_id, Flights_id FROM collection_has_flights WHERE `Collection_id`=? order by Collection_id;" [collid]
 
---простые функции для вычленения некоторых данных, нужных в функции roadget и graph
-citynames :: (String) -> Citynames
-citynames (cname) = Citynames {cname = cname }
-
+--простая функция для отбрасывания лишнего, нужная в roadget.
 getnames :: (Citynames) -> String
 getnames (Citynames {cname=cname}) = cname
 
@@ -73,6 +71,7 @@ flights (flightid, flight, idfrom, idto) = Flights { flightid = flightid, flight
 
 collfl :: (Int, Int) -> Collfl
 collfl (collid, flid) = Collfl { collid = collid, flid = flid }
+
 --Далее идет описание типов данных и способов их создания из типа QueryResults, который возвращают функции обращения к бд.
 data Cities = Cities {cityid :: Int, name:: String, continent :: String, country :: String, latitude :: Double, longitude :: Double } deriving Show
 
@@ -137,9 +136,9 @@ connectInfo = ConnectInfo { connectHost = "localhost",
 res :: String -> SqlQuery [Citynames]
 res x = selecttwocities x
 
-
-graph:: String -> String -> IO String
-graph x y=return(x++" -> "++ y)
+--Функция указана грязной так как в теории она должна была быть таковой в модуле Graph (из-за обращений к бд)
+path:: String -> String -> IO String
+path x y=return(x++" -> "++ y)
 
 --Функция, которая нужна была для проекта. Она вычленяет названия городов начала и конца из строки ввода,
 --подаваемой ей из модуля Server и вызывает с ними функцию path. Так как сама функция path из модуля graph
@@ -152,7 +151,7 @@ roadget from body = do
   conn  <- connect connectInfo
   cities <- res body conn
   if ((length cities) == 2) then do
-    gr <- graph (head (map getnames cities)) (head (tail(map getnames cities)))
+    gr <- path (head (map getnames cities)) (head (tail(map getnames cities)))
     return ("Hello,"++from++". Here's your request:"++gr++".") else return ("Wrong Input."++ from++", correct it, please, and try again.")
 
 run :: IO ()
@@ -164,4 +163,3 @@ run = do
   value <- roadget name line
   print (value)
   return ()
-
