@@ -9,7 +9,9 @@ import Database.MySQL.Simple.QueryResults
 import Database.MySQL.Simple.Result
 import Database.MySQL.Simple.Types
 import Data.Int
-import Data.List
+import Data.List 
+import Data.List.Split (splitOn)
+import Data.Text (pack, unpack, isInfixOf)
 import System.IO
 import Control.Applicative
 
@@ -150,10 +152,10 @@ roadget :: String -> String -> IO String
 roadget from body = do
   conn  <- connect connectInfo
   cities <- res body conn
-  if ((length cities) == 2) then do
+  if ( ((length cities) == 2) && ((length (splitOn (head (map getnames cities)) body)) < 3) && ((length (splitOn (head (tail (map getnames cities))) body)) < 3) ) then do
     gr <- path (head (map getnames cities)) (head (tail(map getnames cities)))
-    return ("Hello,"++from++". Here's your request: "++gr++".") else return ("Wrong Input."++ from++", correct it, please, and try again.")
---Тестовый запуск программы, который считывает с ввода данные, которые должны были приходить в функцию разбора 
+    return ("Hello,"++from++". Here's your request: "++gr++".") else return ("Wrong Input. "++ from++", correct it, please, and try again.")
+--Тестовый запуск программы, который считывает с ввода данные, которые должны были приходить в функцию рзбора 
 --сообщений, а именно Имя пользователя и строку-сообщение для разбора.
 run :: IO ()
 run = do
