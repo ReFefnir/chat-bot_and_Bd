@@ -15,7 +15,7 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall -fno-warn-type-defaults
   exposed-modules:     Db
-  build-depends:       base >= 4.7 && < 5 , mysql-simple, text
+  build-depends:       base >= 4.7 && < 5 , mysql-simple, text, split
   default-language:    Haskell2010
   extensions: OverloadedStrings
 executable chat-bot
@@ -23,7 +23,7 @@ executable chat-bot
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , chat-bot , mysql-simple
+                     , chat-bot , mysql-simple, split
   default-language:    Haskell2010
   extensions: OverloadedStrings
 test-suite chat-bot-test
@@ -31,7 +31,7 @@ test-suite chat-bot-test
   hs-source-dirs:      test
   main-is:             Spec.hs
   build-depends:       base
-                     , chat-bot , mysql-simple
+                     , chat-bot , mysql-simple, split
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
   extensions: OverloadedStrings
