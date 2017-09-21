@@ -1,6 +1,7 @@
 module Db where
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wall #-}
 
 import Database.MySQL.Simple
 import Database.MySQL.Simple.Param
@@ -19,71 +20,108 @@ import Prelude
 
 type SqlQuery a = Connection -> IO a
 type SqlCommand = Connection -> IO Int64
- --Обобщенное описание функция для отправки sql-запрсоов с параметрами и без. На них строятся все функции
---запрсоов.
+--Обобщенное описание функция для отправки sql-запрсоов с параметрами и без.
+-- На них строятся все функции запрсов.
+
+--Возвращает результат, имеет параметры запуска. Select, например.
 sqlQuery :: (QueryParams q, QueryResults r) => Query -> q -> Connection -> IO [r]
 sqlQuery q vs conn = query conn q vs
 
+--Возвращает результат, работате без параметров. Select, например.
 sqlQuery_ :: QueryResults r => Query -> Connection -> IO [r]
 sqlQuery_ q conn = query_ conn q
 
+--Исполняет команду с входными данными без ответа. Insert, например.
 sqlCmd :: QueryParams q => Query -> q -> Connection -> IO Int64
 sqlCmd q vs conn = execute conn q vs
 
+--Исполняет команду без входных данных и без ответа. Insert, например.
 sqlCmd_ :: Query -> Connection -> IO Int64
 sqlCmd_ q conn = execute_ conn q
 
+--Позволяет запускать несколько запросов последовательно с одним указанием параметров БД.
 (>>>) :: SqlQuery a -> SqlQuery b -> SqlQuery b
 (>>>) q1 q2 conn = do
   q1 conn
   q2 conn
---Сами функции, посылающие sql запросы. 
-selecttwocities :: String -> SqlQuery [Citynames]
-selecttwocities spstring = sqlQuery "Select s.name from (Select instr (BINARY (?),t.name) as pos, t.name from cities t) s where s.pos>0 order by s.pos;" [spstring]
 
-selectcityname :: String -> SqlQuery [Cities]
-selectcityname name = sqlQuery "SELECT id, Name, Continent, Country, Latitude, Longitude FROM cities WHERE Name = (?) ;" [name]
+--Сами функции, посылающие sql-запросы к бд. 
 
-selectcityid :: Int -> SqlQuery [Cities]
-selectcityid id = sqlQuery "SELECT id, Name, Continent, Country, Latitude, Longitude FROM cities WHERE id = (?) ;" [id]
+--Возвращает названия одного или нескольких городов в порядке их появления в
+--строке в формате CityNames.  
+selectTwoCities :: String -> SqlQuery [CityNames]
+selectTwoCities messageString = sqlQuery "Select s.name from (Select instr  \
+\ (BINARY (?),t.name) as pos, t.name from cities t) s where s.pos>0 order by  \
+\ s.pos;" [messageString]
 
-selectcollection :: SqlQuery [Collection]
-selectcollection = sqlQuery_ "SELECT id, `From`, `To` FROM collection;"
+--Возвращает запись из таблицы cities по соответствующему имени города.
+selectCityName :: String -> SqlQuery [Cities]
+selectCityName name = sqlQuery "SELECT id, Name, Continent, Country,  \
+\ Latitude, Longitude FROM cities WHERE Name = (?) ;" [name]
 
+--Возвращает запись из таблицы cities по соответствующему id города.
+selectCityId :: Int -> SqlQuery [Cities]
+selectCityId id = sqlQuery "SELECT id, Name, Continent, Country,  \
+\ Latitude, Longitude FROM cities WHERE id = (?) ;" [id]
 
-selectflight :: Int -> Int -> SqlQuery [Flights]
-selectflight toid fromid = sqlQuery " SELECT id, Flight, `From`, `To` FROM flights WHERE `From`=? AND `To`=? LIMIT 1;" [toid,fromid]
+--Выгружает всю коллекцию маршрутов.
+selectCollection :: SqlQuery [Collection]
+selectCollection = sqlQuery_ "SELECT id, `From`, `To` FROM collection;"
 
-selectcollfl :: Int -> SqlQuery [Collfl]
-selectcollfl  collid = sqlQuery " SELECT Collection_id, Flights_id FROM collection_has_flights WHERE `Collection_id`=? order by Collection_id;" [collid]
+--Возвращает запись из таблицы flights по соответствующим id городов в ней.
+selectFlight :: Int -> Int -> SqlQuery [Flights]
+selectFlight toId fromId = sqlQuery " SELECT id, Flight, `From`, `To` FROM  \
+\ flights WHERE `From`=? AND `To`=? LIMIT 1;" [toId,fromId]
 
-insertcity :: [String] -> SqlCommand
-insertcity [b, c, d, e, f] = sqlCmd "insert into cities (Name, Continent, Country, Latitude, Longitude) values (?, ?, ?, ?, ?)" ((intercalate " " (splitOn "_" b)), c, d, (read e::Double), (read f::Double))
---простая функция для отбрасывания лишнего, нужная в roadget.
-getnames :: (Citynames) -> String
-getnames (Citynames {cname=cname}) = cname
+--Возвращает записи из таблицы collection_has_flights по соответствующему id коллекции.
+selectCollectionByFlight :: Int -> SqlQuery [CollectionByFlight]
+selectCollectionByFlight  collectionId = sqlQuery " SELECT Collection_id,  \
+\ Flights_id FROM collection_has_flights WHERE `Collection_id`=? order by  \
+\ Collection_id;" [collectionId]
 
-getid :: (Cities) -> Int
-getid (Cities {cityid=cityid}) = cityid
+--Вставляет город в таблицу cities по заданным данным. id записи создается автоматически (autoincrement).
+insertCity :: [String] -> SqlCommand
+insertCity [name, continent, country, latitude, longitude] = sqlCmd "insert  \
+\ into cities (Name, Continent, Country, Latitude, Longitude)  \
+\ values (?, ?, ?, ?, ?)" ((intercalate " " (splitOn "_" name)),
+ continent, country, (read latitude::Double), (read longitude::Double))
 
---функции создания некоторых наших типов данных. Их использует модуль Graph для модификации базы данных. 
+--простая функция для отбрасывания всего кроме имен городов. 
+getNames :: (CityNames) -> String
+getNames (CityNames {cityName=cityName}) = cityName
+
+--простая функция для отбрасывания всего кроме id города. 
+getId :: (Cities) -> Int
+getId (Cities {cityId=cityId}) = cityId
+
+--функции создания некоторых наших типов данных. Их использует модуль Graph для
+--модификации базы данных. 
 cities :: (Int, String, String, String, Double, Double) -> Cities
-cities (cityid, name, continent, country, latitude, longitude) = Cities { cityid = cityid, name = name, continent = continent, country = country, latitude = latitude, longitude = longitude }
+cities (cityId, name, continent, country, latitude, longitude) = 
+  Cities { cityId = cityId, name = name, continent = continent, country = 
+  country, latitude = latitude, longitude = longitude }
 
 collection :: (Int, Int, Int) -> Collection
-collection (collectionid, fromid, toid) = Collection { collectionid = collectionid, fromid = fromid, toid = toid }
+collection (collectionId, fromId, toId) = 
+  Collection {collectionId = collectionId, fromId = fromId, toId = toId}
 
 flights :: (Int, String, Int, Int) -> Flights
-flights (flightid, flight, idfrom, idto) = Flights { flightid = flightid, flight = flight, idfrom = idfrom, idto = idto }
+flights (flightId, flight, idFrom, idTo) = 
+  Flights {flightId = flightId, flight = flight, idFrom = idFrom, idTo = idTo}
 
-collfl :: (Int, Int) -> Collfl
-collfl (collid, flid) = Collfl { collid = collid, flid = flid }
+collectionByFlight :: (Int, Int) -> CollectionByFlight
+collectionByFlight (collId, flId) = 
+  CollectionByFlight {collId = collId, flId = flId}
 
---Далее идет описание типов данных и способов их создания из типа QueryResults, который возвращают функции обращения к бд.
-data Cities = Cities {cityid :: Int, name:: String, continent :: String, country :: String, latitude :: Double, longitude :: Double } deriving Show
+--Далее идет описание типов данных и способов их создания из типа QueryResults,
+--который возвращают функции обращения к бд.
+data Cities = Cities {cityId :: Int, name:: String, continent :: String,
+  country :: String, latitude :: Double, longitude :: Double } deriving Show
 
 instance QueryResults Cities where
-  convertResults [fa,fb,fc,fd,fe,fg] [va,vb,vc,vd,ve,vg] = Cities {cityid = a, name = b, continent = c, country = d, latitude = e, longitude = g } 
+  convertResults [fa,fb,fc,fd,fe,fg] [va,vb,vc,vd,ve,vg] = 
+    Cities {cityId = a, name = b, continent = c, country = d, latitude = e, 
+    longitude = g } 
     where a = convert fa va
           b = convert fb vb
           c = convert fc vc
@@ -92,36 +130,42 @@ instance QueryResults Cities where
           g = convert fg vg      
   convertResults fs vs  = convertError fs vs 2
 
-data Citynames = Citynames {cname:: String} deriving Show
+data CityNames = CityNames {cityName:: String} deriving Show
 
-instance QueryResults Citynames where
-  convertResults [fa] [va] = Citynames {cname = a} 
+instance QueryResults CityNames where
+  convertResults [fa] [va] = CityNames {cityName = a} 
     where a = convert fa va   
   convertResults fs vs  = convertError fs vs 2
 
-data Collection = Collection {collectionid :: Int, fromid :: Int, toid :: Int} deriving Show
+data Collection = Collection {collectionId :: Int, fromId :: Int, toId :: Int}
+  deriving Show
 
 instance QueryResults Collection where
-  convertResults [fa,fb,fc] [va,vb,vc] = Collection {collectionid = a, fromid = b, toid = c } 
+  convertResults [fa,fb,fc] [va,vb,vc] = 
+    Collection {collectionId = a, fromId = b, toId = c } 
     where a = convert fa va
           b = convert fb vb
           c = convert fc vc     
   convertResults fs vs  = convertError fs vs 2
 
-data Flights = Flights {flightid :: Int, flight :: String, idfrom :: Int, idto :: Int} deriving Show
+data Flights = 
+  Flights {flightId :: Int, flight :: String, idFrom :: Int, idTo :: Int} 
+  deriving Show
 
 instance QueryResults Flights where
-  convertResults [fa,fb,fc,fd] [va,vb,vc,vd] = Flights {flightid = a, flight = b, idfrom = c, idto = d } 
+  convertResults [fa,fb,fc,fd] [va,vb,vc,vd] =
+    Flights {flightId = a, flight = b, idFrom = c, idTo = d } 
     where a = convert fa va
           b = convert fb vb
           c = convert fc vc
           d = convert fd vd     
   convertResults fs vs  = convertError fs vs 2
 
-data Collfl = Collfl {collid :: Int, flid :: Int} deriving Show
+data CollectionByFlight = CollectionByFlight {collId :: Int, flId :: Int}
+  deriving Show
 
-instance QueryResults Collfl where
-  convertResults [fa,fb] [va,vb] = Collfl {collid = a, flid = b} 
+instance QueryResults CollectionByFlight where
+  convertResults [fa,fb] [va,vb] = CollectionByFlight {collId = a, flId = b} 
     where a = convert fa va
           b = convert fb vb 
   convertResults fs vs  = convertError fs vs 2
@@ -129,7 +173,8 @@ instance QueryResults Collfl where
 
 
 
---Данные для поключения к моей базе данных. При желании их можно изменить. Описание базы данных есть в readme.
+--Данные для поключения к моей базе данных. При желании их можно изменить.
+--Описание базы данных есть в readme.
 connectInfo :: ConnectInfo
 connectInfo = ConnectInfo { connectHost = "localhost",
                             connectPort = 3306,
@@ -140,63 +185,129 @@ connectInfo = ConnectInfo { connectHost = "localhost",
                             connectPath = "",
                              connectSSL = Nothing }
 
-res :: String -> SqlQuery [Citynames]
-res x = selecttwocities x
+--Берет строку для разбора, возвращает названия двух городов из таблицы.
+findTwoCities :: String -> SqlQuery [CityNames]
+findTwoCities x = selectTwoCities x
 
-namec:: String -> SqlQuery [Cities]
-namec x = selectcityname x
+--Берет имя города, возвращает запись из таблицы о нем.
+findCityByName:: String -> SqlQuery [Cities]
+findCityByName x = selectCityName x
 
---Функция указана грязной так как в теории она должна была быть таковой в модуле Graph (из-за обращений к бд)
+--Функция указана грязной так как в теории она должна была быть таковой в
+--модуле Graph (из-за обращений к бд). Эта заглушка просто возвращает два 
+--города в том же порядке через " -> "
 path:: String -> String -> IO String
-path x y=return(x++" -> "++ y)
+path from to=return(from++" -> "++ to)
+
 --Функция добавления города.
-cityadd:: String ->String -> IO String
-cityadd from body = do
-  let cr = words body
-  if ((length cr) == 6) then do
+cityAdd:: String ->String -> IO String
+cityAdd from body = do
+  let separatedString = words body
+  if ((length separatedString) == 6) 
+  then do
     conn  <- connect connectInfo
-    insertcity (tail cr) conn
-    gr <- namec (intercalate " " (splitOn "_" (head (tail cr)))) conn
-    return ("Hello, "++from++". New city id= "++(show (getid (head gr)))++".")
-  else return (errcity from body cr)
+    insertCity (tail separatedString) conn
+    gr <- findCityByName (intercalate " " 
+      (splitOn "_" (head (tail separatedString)))) conn
+    return ("Hello, "++from++". New city id= "++(show (getId (head gr)))++".")
+  else 
+    return (errorCity from body separatedString)
+
 --Разбор ошибок добавления нового города
-errcity:: String -> String -> [String] -> String
-errcity from body cr = if ((length cr) < 6) then "Too little params, "++from++". Use spaces to separate them." else "Too many params, "++from++". If your city name consists of multiple words, use _ to separate them. It will then be changed to normal space."
---Функция, которая нужна была для проекта. Она может добавить новый город (если введена команда "/AddCity"), 
---иначе вычленяет названия городов начала и конца из строки ввода,подаваемой ей из модуля Server и вызывает 
---с ними функцию path. Так как сама функция path из модуля graph не работает, вместо этого вызывается 
---функция-заглушка, которая просто возвращает эти города. Действует посредством sql-запроса к базе по поиску
---вхождения городов в строку, а затем выводит все эти города в порядке их наождения в строке (мое допущение 
---в том, что сначала будет введен начальный город, а потом уже город-цель; немного это правится проверкой на
---наличие "from" перед вторым городом и сменой порядка городов в таком случае). Если их число не равно 2 
---(дубликаты считаются отдельно), вызывается функцию разбора ошибок erres. Иначе запускает path.
-roadget :: String -> String -> IO String
-roadget from body = if ((isPrefixOf "/AddCity" body)||(isPrefixOf "/Addcity" body)||(isPrefixOf "/addCity" body)||(isPrefixOf "/addcity" body)||(isPrefixOf "AddCity" body)||(isPrefixOf "Addcity" body)||(isPrefixOf "addCity" body)||(isPrefixOf "addcity" body)||(isPrefixOf "/Add City" body)||(isPrefixOf "/Add city" body)||(isPrefixOf "/add City" body)||(isPrefixOf "/add city" body)||(isPrefixOf "Add City" body)||(isPrefixOf "Add city" body)||(isPrefixOf "add City" body)||(isPrefixOf "add city" body)||(isPrefixOf "/Add_City" body)||(isPrefixOf "/Add_city" body)||(isPrefixOf "/add_City" body)||(isPrefixOf "/add_city" body)||(isPrefixOf "Add_City" body)||(isPrefixOf "Add_city" body)||(isPrefixOf "add_City" body)||(isPrefixOf "add_city" body)) then do cityadd from body else do
-  conn  <- connect connectInfo
-  cities <- res body conn
-  if ( ((length cities) == 2) && ((length (splitOn (head (map getnames cities)) body)) < 3) && ((length (splitOn (head (tail (map getnames cities))) body)) < 3) ) then if ((isInfixOf ("from "++(head (tail (map getnames cities)))) body)|| (isInfixOf ("From "++(head (tail (map getnames cities)))) body)) then do
-        gr <- path (head (tail (map getnames cities))) (head (map getnames cities))
+errorCity:: String -> String -> [String] -> String
+errorCity from body separatedString = if ((length separatedString) < 6) 
+then 
+  "Too little params, "++from++". Use spaces to separate them." 
+else "Too many params, "++from++". If your city name consists of multiple"++
+  " words, use _ to separate them. It will then be changed to normal space."
+
+--Функция, которая нужна была для проекта. Она может добавить новый город
+--(если введена команда "/AddCity"), иначе вычленяет названия городов начала и
+-- конца из строки ввода,подаваемой ей из модуля Server и вызывает с ними
+--функцию path. Так как сама функция path из модуля graph не работает, вместо
+--этого вызывается функция-заглушка, которая просто возвращает эти города. 
+--Действует посредством sql-запроса к базе по поиску вхождения городов в 
+--строку, а затем выводит все эти города в порядке их наождения в строке 
+--(мое допущение в том, что сначала будет введен начальный город, а потом
+--уже город-цель; немного это правится проверкой на наличие "from" перед 
+--вторым городом и сменой порядка городов в таком случае). Если их число 
+--не равно 2 (дубликаты считаются отдельно), вызывается функцию разбора 
+--ошибок wrongInput. Иначе запускает path.
+roadGet :: String -> String -> IO String
+roadGet from body = if ((isPrefixOf "/AddCity" body)||
+  (isPrefixOf "/Addcity" body)||(isPrefixOf "/addCity" body)||
+  (isPrefixOf "/addcity" body)||(isPrefixOf "AddCity" body)||
+  (isPrefixOf "Addcity" body)||(isPrefixOf "addCity" body)||
+  (isPrefixOf "addcity" body)||(isPrefixOf "/Add City" body)||
+  (isPrefixOf "/Add city" body)||(isPrefixOf "/add City" body)||
+  (isPrefixOf "/add city" body)||(isPrefixOf "Add City" body)||
+  (isPrefixOf "Add city" body)||(isPrefixOf "add City" body)||
+  (isPrefixOf "add city" body)||(isPrefixOf "/Add_City" body)||
+  (isPrefixOf "/Add_city" body)||(isPrefixOf "/add_City" body)||
+  (isPrefixOf "/add_city" body)||(isPrefixOf "Add_City" body)||
+  (isPrefixOf "Add_city" body)||(isPrefixOf "add_City" body)||
+  (isPrefixOf "add_city" body)) 
+  then do 
+    cityAdd from body 
+  else do
+    conn  <- connect connectInfo
+    cities <- findTwoCities body conn
+    if ( ((length cities) == 2) &&
+      ((length (splitOn (head (map getNames cities)) body)) < 3) &&
+      ((length (splitOn (head (tail (map getNames cities))) body)) < 3) ) 
+    then
+      if ((isInfixOf ("from "++(head (tail (map getNames cities)))) body)||
+        (isInfixOf ("From "++(head (tail (map getNames cities)))) body)) 
+      then do
+        gr <- path (head (tail (map getNames cities))) 
+          (head (map getNames cities))
         return ("Hello, "++from++". Here's your request: "++gr++".")
       else do
-        gr <- path (head (map getnames cities)) (head (tail (map getnames cities)))
+        gr <- path (head (map getNames cities)) 
+          (head (tail (map getNames cities)))
         return ("Hello, "++from++". Here's your request: "++gr++".")
-    else return (erres from body cities)
---Функция более точного разбора ошибок ввода при работе с городами.
-erres:: String -> String -> [Citynames] -> String
-erres from body cities=case (length cities) of
-  (2) ->if ((length (splitOn (head (tail (map getnames cities))) body)) < 3) then "Hey, "++from++". You asked me twice about city "++(head (map getnames cities))++". If you want to go to "++(head (tail (map getnames cities)))++" and back, ask me twice (separately)." else "I don't know what to say, "++from++". You asked me about "++(head (tail (map getnames cities)))++" multiple times. What's the meaning of this?"
-  (1) ->if ((length (splitOn (head (map getnames cities)) body)) > 2) then "Hello, "++from++". You wanted to trick me and stay in "++(head (map getnames cities))++", didn't you?" else from++", I need two cities to build route. Maybe I don't know one of the cities you specified. If so, you can add it with /AddCity command. City "++(head (map getnames cities))++" is known to me."
-  (0) -> "Sorry, "++from++", I don't know any of the cities you specified. If you didn't, specify any, it's just a wrong input."
-  (_) -> "Sorry, "++from++", I can work with two cities only. You asked of cities: "++(intercalate ", " (map getnames cities))++"."
+    else 
+      return (wrongInput from body cities)
 
---Тестовый запуск программы, который считывает с ввода данные, которые должны были приходить в функцию рзбора 
---сообщений, а именно Имя пользователя и строку-сообщение для разбора.
+--Функция более точного разбора ошибок ввода при работе с городами.
+wrongInput:: String -> String -> [CityNames] -> String
+wrongInput from body cities = case (length cities) of
+  (2) ->if ((length (splitOn (head (tail (map getNames cities))) body)) < 3) 
+    then
+      "Hey, "++from++". You asked me twice about city "++
+      (head (map getNames cities))++". If you want to go to "++
+      (head (tail (map getNames cities)))++
+      " and back, ask me twice (separately)." 
+    else
+      "I don't know what to say, "++from++". You asked me about "++
+      (head (tail (map getNames cities)))++" multiple times. "++
+      "What's the meaning of this?"
+  (1) ->if ((length (splitOn (head (map getNames cities)) body)) > 2) 
+    then
+      "Hello, "++from++". You wanted to trick me and stay in "++
+      (head (map getNames cities))++", didn't you?" 
+    else 
+      from++", I need two cities to build route. Maybe I don't"++
+      " know one of the cities you specified. If so, you can add it with "++
+      "/AddCity command. City "++(head (map getNames cities))++
+      " is known to me."
+  (0) -> "Sorry, "++from++
+    ", I don't know any of the cities you specified. If you didn't specify"++
+    " any, it's just a wrong input."
+  (_) -> "Sorry, "++from++
+    ", I can work with two cities only. You asked of cities: "++
+    (intercalate ", " (map getNames cities))++"."
+
+--Тестовый запуск программы, который считывает с ввода данные, которые должны
+--были приходить в функцию рзбора сообщений, а именно Имя пользователя и 
+--строку-сообщение для разбора.
 run :: IO ()
 run = do
   print "Enter your name:"
-  name <- getLine
-  print "Enter /AddCity command with params (Name, Continent, Country, latitude, longitude) or from/to:"
+  from <- getLine
+  print "Enter /AddCity command with params (Name, Continent, Country,  \
+\ latitude, longitude) or from/to:"
   line <- getLine
-  value <- roadget name line
+  value <- roadGet from line
   print (value)
   return ()
