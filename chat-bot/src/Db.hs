@@ -9,9 +9,9 @@ import Database.MySQL.Simple.QueryResults
 import Database.MySQL.Simple.Result
 import Database.MySQL.Simple.Types
 import Data.Int
+import Data.String (words)
 import Data.List 
 import Data.List.Split (splitOn)
-import Data.Text (pack, unpack, isInfixOf)
 import System.IO
 import Control.Applicative
 
@@ -26,7 +26,7 @@ sqlQuery q vs conn = query conn q vs
 
 sqlQuery_ :: QueryResults r => Query -> Connection -> IO [r]
 sqlQuery_ q conn = query_ conn q
---Последние две в итоге не были использованы, они нужны для модификации БД, но данный функционал так и не был --задействован в модуле Graph, занимающимся этим
+
 sqlCmd :: QueryParams q => Query -> q -> Connection -> IO Int64
 sqlCmd q vs conn = execute conn q vs
 
@@ -57,9 +57,16 @@ selectflight toid fromid = sqlQuery " SELECT id, Flight, `From`, `To` FROM fligh
 selectcollfl :: Int -> SqlQuery [Collfl]
 selectcollfl  collid = sqlQuery " SELECT Collection_id, Flights_id FROM collection_has_flights WHERE `Collection_id`=? order by Collection_id;" [collid]
 
+insertcity :: [String] -> SqlCommand
+insertcity [b, c, d, e, f] = sqlCmd "insert into cities (Name, Continent, Country, Latitude, Longitude) values (?, ?, ?, ?, ?)" (b, c, d, (read e::Double), (read f::Double))
+
+
 --простая функция для отбрасывания лишнего, нужная в roadget.
 getnames :: (Citynames) -> String
 getnames (Citynames {cname=cname}) = cname
+
+getid :: (Cities) -> Int
+getid (Cities {cityid=cityid}) = cityid
 
 --функции создания некоторых наших типов данных. Их использует модуль Graph для модификации базы данных. 
 cities :: (Int, String, String, String, Double, Double) -> Cities
@@ -138,30 +145,48 @@ connectInfo = ConnectInfo { connectHost = "localhost",
 res :: String -> SqlQuery [Citynames]
 res x = selecttwocities x
 
+namec:: String -> SqlQuery [Cities]
+namec x = selectcityname x
+
 --Функция указана грязной так как в теории она должна была быть таковой в модуле Graph (из-за обращений к бд)
 path:: String -> String -> IO String
 path x y=return(x++" -> "++ y)
-
---Функция, которая нужна была для проекта. Она вычленяет названия городов начала и конца из строки ввода,
---подаваемой ей из модуля Server и вызывает с ними функцию path. Так как сама функция path из модуля graph
---не работает, вместо этого вызывается функция-заглушка, которая просто возвращает эти города. 
---Действует посредством sql-запроса к базе по поиску вхождения городов в строку, а затем выводит все эти
---города в порядке их наождения в строке (мое допущение в том, что сначала будет введен начальный город,
---а потом уже город-цель). Если их число не равно 3, выдает ошибку ввода. Иначе запускает path.
+--Функция добавления города.
+cityadd:: String ->String -> IO String
+cityadd from body = do
+  let cr = words body
+  if ((length cr) == 6) then do
+    conn  <- connect connectInfo
+    insertcity (tail cr) conn
+    gr <- namec (head (tail cr)) conn
+    return ("Hello, "++from++". New city id= "++(show (getid (head gr)))++".")
+  else return ("Wrong input.")
+--Функция, которая нужна была для проекта. Она может добавить новый город (если введена команда "/AddCity"), 
+--иначе вычленяет названия городов начала и конца из строки ввода,подаваемой ей из модуля Server и вызывает 
+--с ними функцию path. Так как сама функция path из модуля graph не работает, вместо этого вызывается 
+--функция-заглушка, которая просто возвращает эти города. Действует посредством sql-запроса к базе по поиску
+--вхождения городов в строку, а затем выводит все эти города в порядке их наождения в строке (мое допущение 
+--в том, что сначала будет введен начальный город, а потом уже город-цель; немного это правится проверкой на
+--наличие "from" перед вторым городом и сменой порядка городов в таком случае). Если их число не равно 3, 
+--выдает ошибку ввода. Иначе запускает path.
 roadget :: String -> String -> IO String
-roadget from body = do
+roadget from body = if (isPrefixOf "/AddCity" body) then do cityadd from body else do
   conn  <- connect connectInfo
   cities <- res body conn
-  if ( ((length cities) == 2) && ((length (splitOn (head (map getnames cities)) body)) < 3) && ((length (splitOn (head (tail (map getnames cities))) body)) < 3) ) then do
-    gr <- path (head (map getnames cities)) (head (tail(map getnames cities)))
-    return ("Hello,"++from++". Here's your request: "++gr++".") else return ("Wrong Input. "++ from++", correct it, please, and try again.")
+  if ( ((length cities) == 2) && ((length (splitOn (head (map getnames cities)) body)) < 3) && ((length (splitOn (head (tail (map getnames cities))) body)) < 3) ) then if ((isInfixOf ("from "++(head (tail (map getnames cities)))) body)|| (isInfixOf ("From "++(head (tail (map getnames cities)))) body)) then do
+        gr <- path (head (tail (map getnames cities))) (head (map getnames cities))
+        return ("Hello, "++from++". Here's your request: "++gr++".")
+      else do
+        gr <- path (head (map getnames cities)) (head (tail (map getnames cities)))
+        return ("Hello, "++from++". Here's your request: "++gr++".")
+    else return ("Wrong Input. "++ from++", correct it, please, and try again.")
 --Тестовый запуск программы, который считывает с ввода данные, которые должны были приходить в функцию рзбора 
 --сообщений, а именно Имя пользователя и строку-сообщение для разбора.
 run :: IO ()
 run = do
   print "Enter your name:"
   name <- getLine
-  print "Enter from/to:"
+  print "Enter /AddCity command with params (Name, Continent, Country, latitude, longitude) or from/to:"
   line <- getLine
   value <- roadget name line
   print (value)
