@@ -167,8 +167,8 @@ cityadd from body = do
 --функция-заглушка, которая просто возвращает эти города. Действует посредством sql-запроса к базе по поиску
 --вхождения городов в строку, а затем выводит все эти города в порядке их наождения в строке (мое допущение 
 --в том, что сначала будет введен начальный город, а потом уже город-цель; немного это правится проверкой на
---наличие "from" перед вторым городом и сменой порядка городов в таком случае). Если их число не равно 3, 
---выдает ошибку ввода. Иначе запускает path.
+--наличие "from" перед вторым городом и сменой порядка городов в таком случае). Если их число не равно 2 
+--(дубликаты считаются отдельно), вызывается функцию разбора ошибок erres. Иначе запускает path.
 roadget :: String -> String -> IO String
 roadget from body = if (isPrefixOf "/AddCity" body) then do cityadd from body else do
   conn  <- connect connectInfo
@@ -179,7 +179,15 @@ roadget from body = if (isPrefixOf "/AddCity" body) then do cityadd from body el
       else do
         gr <- path (head (map getnames cities)) (head (tail (map getnames cities)))
         return ("Hello, "++from++". Here's your request: "++gr++".")
-    else return ("Wrong Input. "++ from++", correct it, please, and try again.")
+    else return (erres from body cities)
+--Функция более точного разбора ошибок ввода при работе с городами.
+erres:: String -> String -> [Citynames] -> String
+erres from body cities=case (length cities) of
+  (2) ->if ((length (splitOn (head (tail (map getnames cities))) body)) < 3) then "Hey, "++from++". You asked me twice about city "++(head (map getnames cities))++". If you want to go to "++(head (tail (map getnames cities)))++" and back, ask me twice (separately)." else "I don't know what to say, "++from++". You asked me about "++(head (tail (map getnames cities)))++" multiple times. What's the meaning of this?"
+  (1) ->if ((length (splitOn (head (map getnames cities)) body)) > 2) then "Hello, "++from++". You wanted to trick me and stay in "++(head (map getnames cities))++", didn't you?" else from++", I need two cities to build route. Maybe I don't know one of the cities you specified. If so, you can add it with /AddCity command. City "++(head (map getnames cities))++" is known to me."
+  (0) -> "Sorry, "++from++", I don't know any of the cities you specified. If you didn't, specify any, it's just a wrong input."
+  (_) -> "Sorry, "++from++", I can work with two cities only. You asked of cities: "++(intercalate ", " (map getnames cities))++"."
+
 --Тестовый запуск программы, который считывает с ввода данные, которые должны были приходить в функцию рзбора 
 --сообщений, а именно Имя пользователя и строку-сообщение для разбора.
 run :: IO ()
