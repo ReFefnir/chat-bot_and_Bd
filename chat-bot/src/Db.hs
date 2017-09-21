@@ -58,9 +58,7 @@ selectcollfl :: Int -> SqlQuery [Collfl]
 selectcollfl  collid = sqlQuery " SELECT Collection_id, Flights_id FROM collection_has_flights WHERE `Collection_id`=? order by Collection_id;" [collid]
 
 insertcity :: [String] -> SqlCommand
-insertcity [b, c, d, e, f] = sqlCmd "insert into cities (Name, Continent, Country, Latitude, Longitude) values (?, ?, ?, ?, ?)" (b, c, d, (read e::Double), (read f::Double))
-
-
+insertcity [b, c, d, e, f] = sqlCmd "insert into cities (Name, Continent, Country, Latitude, Longitude) values (?, ?, ?, ?, ?)" ((intercalate " " (splitOn "_" b)), c, d, (read e::Double), (read f::Double))
 --простая функция для отбрасывания лишнего, нужная в roadget.
 getnames :: (Citynames) -> String
 getnames (Citynames {cname=cname}) = cname
@@ -158,9 +156,12 @@ cityadd from body = do
   if ((length cr) == 6) then do
     conn  <- connect connectInfo
     insertcity (tail cr) conn
-    gr <- namec (head (tail cr)) conn
+    gr <- namec (intercalate " " (splitOn "_" (head (tail cr)))) conn
     return ("Hello, "++from++". New city id= "++(show (getid (head gr)))++".")
-  else return ("Wrong input.")
+  else return (errcity from body cr)
+--Разбор ошибок добавления нового города
+errcity:: String -> String -> [String] -> String
+errcity from body cr = if ((length cr) < 6) then "Too little params, "++from++". Use spaces to separate them." else "Too many params, "++from++". If your city name consists of multiple words, use _ to separate them. It will then be changed to normal space."
 --Функция, которая нужна была для проекта. Она может добавить новый город (если введена команда "/AddCity"), 
 --иначе вычленяет названия городов начала и конца из строки ввода,подаваемой ей из модуля Server и вызывает 
 --с ними функцию path. Так как сама функция path из модуля graph не работает, вместо этого вызывается 
@@ -170,7 +171,7 @@ cityadd from body = do
 --наличие "from" перед вторым городом и сменой порядка городов в таком случае). Если их число не равно 2 
 --(дубликаты считаются отдельно), вызывается функцию разбора ошибок erres. Иначе запускает path.
 roadget :: String -> String -> IO String
-roadget from body = if (isPrefixOf "/AddCity" body) then do cityadd from body else do
+roadget from body = if ((isPrefixOf "/AddCity" body)||(isPrefixOf "/Addcity" body)||(isPrefixOf "/addCity" body)||(isPrefixOf "/addcity" body)||(isPrefixOf "AddCity" body)||(isPrefixOf "Addcity" body)||(isPrefixOf "addCity" body)||(isPrefixOf "addcity" body)||(isPrefixOf "/Add City" body)||(isPrefixOf "/Add city" body)||(isPrefixOf "/add City" body)||(isPrefixOf "/add city" body)||(isPrefixOf "Add City" body)||(isPrefixOf "Add city" body)||(isPrefixOf "add City" body)||(isPrefixOf "add city" body)||(isPrefixOf "/Add_City" body)||(isPrefixOf "/Add_city" body)||(isPrefixOf "/add_City" body)||(isPrefixOf "/add_city" body)||(isPrefixOf "Add_City" body)||(isPrefixOf "Add_city" body)||(isPrefixOf "add_City" body)||(isPrefixOf "add_city" body)) then do cityadd from body else do
   conn  <- connect connectInfo
   cities <- res body conn
   if ( ((length cities) == 2) && ((length (splitOn (head (map getnames cities)) body)) < 3) && ((length (splitOn (head (tail (map getnames cities))) body)) < 3) ) then if ((isInfixOf ("from "++(head (tail (map getnames cities)))) body)|| (isInfixOf ("From "++(head (tail (map getnames cities)))) body)) then do
