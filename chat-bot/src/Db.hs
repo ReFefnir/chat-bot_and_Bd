@@ -39,7 +39,8 @@ sqlCmd q vs conn = execute conn q vs
 sqlCmd_ :: Query -> Connection -> IO Int64
 sqlCmd_ q conn = execute_ conn q
 
---Позволяет запускать несколько запросов последовательно с одним указанием параметров БД.
+--Позволяет запускать несколько запросов последовательно с одним указанием
+--параметров БД.
 (>>>) :: SqlQuery a -> SqlQuery b -> SqlQuery b
 (>>>) q1 q2 conn = do
   q1 conn
@@ -73,13 +74,15 @@ selectFlight :: Int -> Int -> SqlQuery [Flights]
 selectFlight toId fromId = sqlQuery " SELECT id, Flight, `From`, `To` FROM  \
 \ flights WHERE `From`=? AND `To`=? LIMIT 1;" [toId,fromId]
 
---Возвращает записи из таблицы collection_has_flights по соответствующему id коллекции.
+--Возвращает записи из таблицы collection_has_flights по соответствующему
+--id коллекции.
 selectCollectionByFlight :: Int -> SqlQuery [CollectionByFlight]
 selectCollectionByFlight  collectionId = sqlQuery " SELECT Collection_id,  \
 \ Flights_id FROM collection_has_flights WHERE `Collection_id`=? order by  \
 \ Collection_id;" [collectionId]
 
---Вставляет город в таблицу cities по заданным данным. id записи создается автоматически (autoincrement).
+--Вставляет город в таблицу cities по заданным данным. id записи создается 
+--автоматически (autoincrement).
 insertCity :: [String] -> SqlCommand
 insertCity [name, continent, country, latitude, longitude] = sqlCmd "insert  \
 \ into cities (Name, Continent, Country, Latitude, Longitude)  \
