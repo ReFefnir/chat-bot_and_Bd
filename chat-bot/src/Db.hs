@@ -235,29 +235,6 @@ else "Too many params, "++from++". If your city name consists of multiple"++
 --вторым городом и сменой порядка городов в таком случае). Если их число 
 --не равно 2 (дубликаты считаются отдельно), вызывается функцию разбора 
 --ошибок wrongInput. Иначе запускает path.
-
-falseCityDetection:: String -> String -> String -> Bool
-falseCityDetection body searchCity city = (isInfixOf searchCity city) &&
-  ((length (splitOn searchCity body)) == (length (splitOn city body)))
-
-boolToInt:: Bool -> Int
-boolToInt bool = if bool then 1 else 0
-
-
-nameDetection:: String -> String -> Bool
-nameDetection searchCity city = isInfixOf searchCity city 
-
-
-clearCities:: String -> [String] -> [String]
-clearCities body cities = case (length cities) of
-  (0) -> cities
-  (1) -> cities
-  (_) -> if (or (map (falseCityDetection body (head cities)) (tail cities))) 
-  then
-    clearCities body (tail cities)
-  else (head cities):(clearCities body (tail cities))
-
-
 roadGet :: String -> String -> IO String
 roadGet from body = if ((isPrefixOf "/AddCity" body)||
   (isPrefixOf "/Addcity" body)||(isPrefixOf "/addCity" body)||
@@ -285,7 +262,8 @@ roadGet from body = if ((isPrefixOf "/AddCity" body)||
         (boolToInt (nameDetection (head (tail cities)) (head cities)))) ) 
     then
       if ((isInfixOf ("from "++(head (tail cities))) body)||
-        (isInfixOf ("From "++(head (tail cities))) body))|| (secondFirst cities body) 
+        (isInfixOf ("From "++(head (tail cities))) body))|| 
+        (secondFirst cities body) 
       then do
         gr <- path (head (tail cities)) 
           (head cities)
@@ -297,6 +275,34 @@ roadGet from body = if ((isPrefixOf "/AddCity" body)||
     else 
       return (wrongInput from body cities)
 
+--Индикатор того, что searchCity на самом деле ложный результат и его надо
+--удалить.
+falseCityDetection:: String -> String -> String -> Bool
+falseCityDetection body searchCity city = (isInfixOf searchCity city) &&
+  ((length (splitOn searchCity body)) == (length (splitOn city body)))
+
+--True=1, False=0. Нужно для прибавления единицы допустимому числу вхождений 
+--названия города при двойном вхождении за счет включения в другое название.
+boolToInt:: Bool -> Int
+boolToInt bool = if bool then 1 else 0
+
+--Проверяет, входит ли первый город во второй (названия).
+nameDetection:: String -> String -> Bool
+nameDetection searchCity city = isInfixOf searchCity city 
+
+--Удаляет ложные города, оставляя толькко нужные.
+clearCities:: String -> [String] -> [String]
+clearCities body cities = case (length cities) of
+  (0) -> cities
+  (1) -> cities
+  (_) -> if (or (map (falseCityDetection body (head cities)) (tail cities))) 
+  then
+    clearCities body (tail cities)
+  else (head cities):(clearCities body (tail cities))
+
+--Проверяет, является ли одно из названий городов включенным в название другого
+--и, если да, проверяет, действительно ли оно встречается первым в программе
+--или это ошибка и на самом деле это слово идет вторым.
 secondFirst:: [String] -> String -> Bool 
 secondFirst cities body = if (nameDetection(head cities) (head (tail cities))) 
 then 
