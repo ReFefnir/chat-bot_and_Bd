@@ -15,7 +15,6 @@ import Data.List
 import Data.List.Split (splitOn)
 import System.IO
 import Control.Applicative
-
 import Prelude
 
 type SqlQuery a = Connection -> IO a
@@ -236,6 +235,29 @@ else "Too many params, "++from++". If your city name consists of multiple"++
 --вторым городом и сменой порядка городов в таком случае). Если их число 
 --не равно 2 (дубликаты считаются отдельно), вызывается функцию разбора 
 --ошибок wrongInput. Иначе запускает path.
+
+falseCityDetection:: String -> String -> String -> Bool
+falseCityDetection body searchCity city = (isInfixOf searchCity city) &&
+  ((length (splitOn searchCity body)) == (length (splitOn city body)))
+
+boolToInt:: Bool -> Int
+boolToInt bool = if bool then 1 else 0
+
+
+nameDetection:: String -> String -> Bool
+nameDetection searchCity city = isInfixOf searchCity city 
+
+
+clearCities:: String -> [String] -> [String]
+clearCities body cities = case (length cities) of
+  (0) -> cities
+  (1) -> cities
+  (_) -> if (or (map (falseCityDetection body (head cities)) (tail cities))) 
+  then
+    clearCities body (tail cities)
+  else (head cities):(clearCities body (tail cities))
+
+
 roadGet :: String -> String -> IO String
 roadGet from body = if ((isPrefixOf "/AddCity" body)||
   (isPrefixOf "/Addcity" body)||(isPrefixOf "/addCity" body)||
@@ -254,52 +276,63 @@ roadGet from body = if ((isPrefixOf "/AddCity" body)||
     cityAdd from body 
   else do
     conn  <- connect connectInfo
-    cities <- findTwoCities body conn
+    unclearedCities <- findTwoCities body conn
+    let cities = clearCities body (map getNames unclearedCities)
     if ( ((length cities) == 2) &&
-      ((length (splitOn (head (map getNames cities)) body)) < 3) &&
-      ((length (splitOn (head (tail (map getNames cities))) body)) < 3) ) 
+      ((length (splitOn (head cities) body)) < 3  + 
+        (boolToInt (nameDetection(head cities) (head (tail cities))))) &&
+      ((length (splitOn (head (tail cities)) body)) < 3 + 
+        (boolToInt (nameDetection (head (tail cities)) (head cities)))) ) 
     then
-      if ((isInfixOf ("from "++(head (tail (map getNames cities)))) body)||
-        (isInfixOf ("From "++(head (tail (map getNames cities)))) body)) 
+      if ((isInfixOf ("from "++(head (tail cities))) body)||
+        (isInfixOf ("From "++(head (tail cities))) body))|| (secondFirst cities body) 
       then do
-        gr <- path (head (tail (map getNames cities))) 
-          (head (map getNames cities))
+        gr <- path (head (tail cities)) 
+          (head cities)
         return ("Hello, "++from++". Here's your request: "++gr++".")
       else do
-        gr <- path (head (map getNames cities)) 
-          (head (tail (map getNames cities)))
+        gr <- path (head cities) 
+          (head (tail cities))
         return ("Hello, "++from++". Here's your request: "++gr++".")
     else 
       return (wrongInput from body cities)
 
+secondFirst:: [String] -> String -> Bool 
+secondFirst cities body = if (nameDetection(head cities) (head (tail cities))) 
+then 
+  isInfixOf (head cities) (head (tail (splitOn (head (tail cities)) body)))
+else False
+
+
 --Функция более точного разбора ошибок ввода при работе с городами.
-wrongInput:: String -> String -> [CityNames] -> String
+wrongInput:: String -> String -> [String] -> String
 wrongInput from body cities = case (length cities) of
-  (2) ->if ((length (splitOn (head (tail (map getNames cities))) body)) < 3) 
+  (2) ->if ((length (splitOn (head (tail cities)) body)) < 3 + 
+    (boolToInt (nameDetection(head cities) (head (tail cities))))) 
     then
       "Hey, "++from++". You asked me twice about city "++
-      (head (map getNames cities))++". If you want to go to "++
-      (head (tail (map getNames cities)))++
+      (head cities)++". If you want to go to "++
+      (head (tail cities))++
       " and back, ask me twice (separately)." 
     else
       "I don't know what to say, "++from++". You asked me about "++
-      (head (tail (map getNames cities)))++" multiple times. "++
+      (head (tail cities))++" multiple times. "++
       "What's the meaning of this?"
-  (1) ->if ((length (splitOn (head (map getNames cities)) body)) > 2) 
+  (1) ->if ((length (splitOn (head cities) body)) > 2) 
     then
       "Hello, "++from++". You wanted to trick me and stay in "++
-      (head (map getNames cities))++", didn't you?" 
+      (head cities)++", didn't you?" 
     else 
       from++", I need two cities to build route. Maybe I don't"++
       " know one of the cities you specified. If so, you can add it with "++
-      "/AddCity command. City "++(head (map getNames cities))++
+      "/AddCity command. City "++(head cities)++
       " is known to me."
   (0) -> "Sorry, "++from++
     ", I don't know any of the cities you specified. If you didn't specify"++
     " any, it's just a wrong input."
   (_) -> "Sorry, "++from++
     ", I can work with two cities only. You asked of cities: "++
-    (intercalate ", " (map getNames cities))++"."
+    (intercalate ", " cities)++"."
 
 --Тестовый запуск программы, который считывает с ввода данные, которые должны
 --были приходить в функцию рзбора сообщений, а именно Имя пользователя и 
